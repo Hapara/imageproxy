@@ -72,7 +72,7 @@ func TestIpRanges(t *testing.T) {
 
 func TestUrlParse(t *testing.T) {
 	u, _ := url.Parse("http://10.0.0.5:8080/image")
-	
+
 	if u.Host != "10.0.0.5:8080" {
 		t.Errorf("host not expected [%s]",u.Host)
 		t.FailNow()
@@ -81,13 +81,13 @@ func TestUrlParse(t *testing.T) {
 		t.Errorf("host not expected [%s]",u.Host)
 		t.FailNow()
 	}
-	
+
 	host,port,_ := net.SplitHostPort(u.Host)
 	if host != "10.0.0.5" {
 		t.Errorf("host not expected [%s]",host)
 		t.FailNow()
 	}
-	
+
 	if port != "8080" {
 		t.Errorf("port not expected [%s]",port)
 		t.FailNow()
@@ -98,7 +98,7 @@ func TestUrlParse(t *testing.T) {
 
 func TestUrlParseNoPort(t *testing.T) {
 	u, _ := url.Parse("http://10.0.0.5/image")
-	
+
 	if u.Host != "10.0.0.5" {
 		t.Errorf("host not expected [%s]",u.Host)
 		t.FailNow()
@@ -107,7 +107,7 @@ func TestUrlParseNoPort(t *testing.T) {
 		t.Errorf("not expected [%s]",u.Host)
 		t.FailNow()
 	}
-	
+
 }
 
 func TestBlackList(t *testing.T) {
@@ -210,7 +210,7 @@ func TestCheck304(t *testing.T) {
 			t.Errorf("http.ReadResponse(%q) returned error: %v", tt.resp, err)
 		}
 
-		if got, want := check304(req, resp), tt.is304; got != want {
+		if got, want := check304(req, resp.Header), tt.is304; got != want {
 			t.Errorf("check304(%q, %q) returned: %v, want %v", tt.req, tt.resp, got, want)
 		}
 	}
@@ -233,11 +233,9 @@ func (t testTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	case "/etag":
 		raw = "HTTP/1.1 200 OK\nEtag: \"tag\"\n\n"
 	case "/png":
-		m := image.NewNRGBA(image.Rect(0, 0, 1, 1))
-		img := new(bytes.Buffer)
-		png.Encode(img, m)
-
-		raw = fmt.Sprintf("HTTP/1.1 200 OK\nContent-Length: %d\n\n%v", len(img.Bytes()), img.Bytes())
+		raw = drawImage()
+	case "/favicon.ico":
+		raw = drawImage()
 	default:
 		raw = "HTTP/1.1 404 Not Found\n\n"
 	}
@@ -246,6 +244,14 @@ func (t testTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return http.ReadResponse(buf, req)
 }
 
+func drawImage() string{
+	m := image.NewNRGBA(image.Rect(0, 0, 1, 1))
+	img := new(bytes.Buffer)
+	png.Encode(img, m)
+
+	raw := fmt.Sprintf("HTTP/1.1 200 OK\nContent-Length: %d\n\n%v", len(img.Bytes()), img.Bytes())
+	return raw
+}
 func TestProxy_ServeHTTP(t *testing.T) {
 	p := &Proxy{
 		Client: &http.Client{
@@ -259,7 +265,7 @@ func TestProxy_ServeHTTP(t *testing.T) {
 		url  string // request URL
 		code int    // expected response status code
 	}{
-		{"/favicon.ico", http.StatusOK},
+		{"/http://good.test/favicon.ico", http.StatusOK},
 		{"//foo", http.StatusBadRequest},                            // invalid request URL
 		{"/http://bad.test/", http.StatusBadRequest},                // Disallowed host
 		{"/http://good.test/error", http.StatusInternalServerError}, // HTTP protocol error
