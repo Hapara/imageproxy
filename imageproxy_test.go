@@ -233,11 +233,9 @@ func (t testTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	case "/etag":
 		raw = "HTTP/1.1 200 OK\nEtag: \"tag\"\n\n"
 	case "/png":
-		m := image.NewNRGBA(image.Rect(0, 0, 1, 1))
-		img := new(bytes.Buffer)
-		png.Encode(img, m)
-
-		raw = fmt.Sprintf("HTTP/1.1 200 OK\nContent-Length: %d\n\n%v", len(img.Bytes()), img.Bytes())
+		raw = drawImage()
+	case "/favicon.ico":
+		raw = drawImage()
 	default:
 		raw = "HTTP/1.1 404 Not Found\n\n"
 	}
@@ -246,6 +244,14 @@ func (t testTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return http.ReadResponse(buf, req)
 }
 
+func drawImage() string{
+	m := image.NewNRGBA(image.Rect(0, 0, 1, 1))
+	img := new(bytes.Buffer)
+	png.Encode(img, m)
+
+	raw := fmt.Sprintf("HTTP/1.1 200 OK\nContent-Length: %d\n\n%v", len(img.Bytes()), img.Bytes())
+	return raw
+}
 func TestProxy_ServeHTTP(t *testing.T) {
 	p := &Proxy{
 		Client: &http.Client{
@@ -259,7 +265,7 @@ func TestProxy_ServeHTTP(t *testing.T) {
 		url  string // request URL
 		code int    // expected response status code
 	}{
-		{"/favicon.ico", http.StatusBadRequest},
+		{"/http://good.test/favicon.ico", http.StatusOK},
 		{"//foo", http.StatusBadRequest},                            // invalid request URL
 		{"/http://bad.test/", http.StatusBadRequest},                // Disallowed host
 		{"/http://good.test/error", http.StatusInternalServerError}, // HTTP protocol error
