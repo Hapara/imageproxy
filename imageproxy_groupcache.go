@@ -14,8 +14,10 @@ import (
 	"github.com/golang/groupcache"
 )
 
+type contextKey string
+
 type ImageFetcher interface {
-	GetImageByURL(url string) (*CacheResponse, error)
+	GetImageByURL(url string, client *http.Client) (*CacheResponse, error)
 }
 
 type CacheResponse struct {
@@ -37,6 +39,7 @@ const name = "urls"
 var (
 	ModelGroupCacheSizeDefault   = int64(1024 * 1024 * 100)
 	ModelGroupCacheWindowDefault = 1 * time.Hour
+	contextKeyClient             = contextKey("http-client")
 )
 
 // NewImageProxyGroupcache initializes the image proxy group cache
@@ -44,6 +47,7 @@ func NewImageProxyGroupcache(cacheSize int64, cacheWindow time.Duration) *ImageP
 	service := &ImageProxyGroupcache{
 		CacheWindow: cacheWindow,
 	}
+
 	cacheGroup := groupcache.GetGroup(name)
 	if cacheGroup == nil {
 
@@ -54,10 +58,10 @@ func NewImageProxyGroupcache(cacheSize int64, cacheWindow time.Duration) *ImageP
 				return fmt.Errorf("Invalid key")
 			}
 			urlString := p[1]
-			logging.L().Debugf("caching image with url %s", urlString)
+			logging.L().Debugf("specified key doesn't exists in cache. caching image with url %s", urlString)
 
-			client := new(http.Client)
-			resp, err := client.Get(urlString)
+			hClient := ctx.Value(contextKeyClient).(*http.Client)
+			resp, err := hClient.Get(urlString)
 
 			if err != nil {
 				return err
@@ -85,12 +89,14 @@ func NewImageProxyGroupcache(cacheSize int64, cacheWindow time.Duration) *ImageP
 }
 
 // GetImageByURL fetches the image either from cache or from the source specified
-func (service *ImageProxyGroupcache) GetImageByURL(url string) (*CacheResponse, error) {
+func (service *ImageProxyGroupcache) GetImageByURL(url string, client *http.Client) (*CacheResponse, error) {
 	b := []byte{}
 	t := time.Now().UTC().Add(service.CacheWindow / 2).Round(service.CacheWindow).Format(time.RFC3339)
 
 	key := fmt.Sprintf("%s~%s", t, url)
-	err := service.Group.Get(context.TODO(), key, groupcache.AllocatingByteSliceSink(&b))
+	// create context with http client passed-in
+	ctx := context.WithValue(context.TODO(), contextKeyClient, client)
+	err := service.Group.Get(ctx, key, groupcache.AllocatingByteSliceSink(&b))
 	if err != nil {
 		return nil, err
 	}
