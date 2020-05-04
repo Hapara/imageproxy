@@ -82,6 +82,36 @@ func (dl DefaultLogger) Infof(msg string, args ...interface{}) {
 	log.Printf("INFO: %s", imsg)
 }
 
+// NewProxyForWorkspace mimics what NewProxy() does but checks if the http client
+// is passed in, then use that client (supporting Google Thumbnail images)
+func NewProxyForWorkspace(transport http.RoundTripper, cache Cache, httpClient *http.Client) *Proxy {
+	if transport == nil {
+		transport = http.DefaultTransport
+	}
+	if cache == nil {
+		cache = NopCache
+	}
+
+	if httpClient == nil {
+		client := new(http.Client)
+
+		client.Transport = &httpcache.Transport{
+			Transport:           &TransformingTransport{transport, client, DefaultLogger{}},
+			Cache:               cache,
+			MarkCachedResponses: true,
+		}
+
+		httpClient = client
+	}
+
+	return &Proxy{
+		Client:       httpClient,
+		Cache:        cache,
+		Logger:       DefaultLogger{},
+		ImageFetcher: NewImageProxyGroupcache(ModelGroupCacheSizeDefault, ModelGroupCacheWindowDefault),
+	}
+}
+
 // NewProxy constructs a new proxy.  The provided http RoundTripper will be
 // used to fetch remote URLs.  If nil is provided, http.DefaultTransport will
 // be used.
@@ -141,7 +171,7 @@ func (p *Proxy) serveImage(w http.ResponseWriter, r *http.Request, useCache bool
 
 	var resp *CacheResponse
 	if useCache {
-		resp, err = p.ImageFetcher.GetImageByURL(u)
+		resp, err = p.ImageFetcher.GetImageByURL(u, p.Client)
 
 		if err != nil {
 			msg := fmt.Sprintf("error fetching image from cache: %v", err)
